@@ -3,6 +3,7 @@
 
 module DeviceTree.DTS.Lexer where
 
+import Data.Char (isPrint)
 import           Data.Functor         (($>))
 import qualified Data.List.NonEmpty   as NE
 import           Data.Text            (Text)
@@ -12,12 +13,12 @@ import           Text.Megaparsec      (Parsec, Pos, SourcePos, getParserState,
                                        many, manyTill, parseTest, sourceColumn,
                                        sourceLine, sourceName, statePos,
                                        takeWhile1P, (<|>))
-import           Text.Megaparsec.Char (anyChar, string)
+import           Text.Megaparsec.Char (anyChar, string, char, satisfy)
 
 
 quickTest :: IO ()
 quickTest = do
-    let input = "/* This is a comment *///This is another comment\n#include"
+    let input = "/* This is a comment *///This is another comment\n#include \"Hello\""
     parseTest posTokenList input
 
 
@@ -67,14 +68,16 @@ data Token
     = TokInclude Include
     | TokComment Comment
     | TokWhitespace Whitespace
+    | TokLiteralString LiteralString
     deriving (Show)
 
 
 token :: Parser Token
 token
-    = TokInclude    <$> include
-  <|> TokComment    <$> comment
-  <|> TokWhitespace <$> whitespace
+    = TokInclude       <$> include
+  <|> TokComment       <$> comment
+  <|> TokWhitespace    <$> whitespace
+  <|> TokLiteralString <$> literalString
 
 
 data Include
@@ -125,3 +128,21 @@ whitespace = Whitespace <$> takeWhile1P (Just "whitespace") isWhitespace
         '\n' -> True
         '\r' -> True
         _    -> False
+
+
+newtype LiteralString = LiteralString Text deriving (Show)
+
+
+literalString :: Parser LiteralString
+literalString = LiteralString <$> (char '"' *> stringContents)
+  where
+    stringContents :: Parser Text
+    stringContents = T.concat <$> manyTill stringAtom (char '"')
+
+    stringAtom :: Parser Text
+    stringAtom
+        = T.singleton <$> satisfy isStringChar
+      <|> string "\\\""
+
+    isStringChar :: Char -> Bool
+    isStringChar = isPrint
